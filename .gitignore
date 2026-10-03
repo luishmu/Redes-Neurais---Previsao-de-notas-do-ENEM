@@ -1,0 +1,11 @@
+# Dados gerados pelos scripts a partir dos microdados do INEP
+dados/
+
+# Microdados brutos
+*.zip
+microdados_enem_*/
+
+# Python / Jupyter
+__pycache__/
+.ipynb_checkpoints/
+*.tmp
