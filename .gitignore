@@ -1,5 +1,5 @@
-# Dados gerados pelos scripts a partir dos microdados do INEP
-dados/
+# As amostras em dados/ (~22 MB) SÃO versionadas, para o notebook rodar direto após o clone.
+# Só os microdados brutos do INEP ficam de fora.
 
 # Microdados brutos
 *.zip

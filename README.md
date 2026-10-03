@@ -26,9 +26,9 @@ Autor: **Luis Helder Martins Uchoa**
 
 - Uma **MLP com embeddings (PyTorch)** prevê a nota média do ENEM 2023 (CN, CH, LC, MT e Redação) a partir de 29 variáveis de perfil e questionário socioeconômico.
 - A rede **empata com o gradient boosting** (MAE ≈ 57 pontos, R² ≈ 0,35) e supera um pouco a regressão linear. O limite está na **informação disponível**, não no modelo.
-- **O modelo aprende a desigualdade.** Entre alunos com nota real ≥ 700, a rede prevê **548** para quem tem renda de até 1 salário mínimo (SM) e **661** para quem tem mais de 7 SM. Usada para selecionar os 10% melhores, ela deixaria de fora ~95% dos talentos de baixa renda.
-- **Os dados de treino definem o viés.** Treinada só com alunos de alta renda, a rede superestima os de baixa renda em **+60 pontos**.
-- **Mais informação reduz o viés, mas não acaba com ele.** Escola, língua estrangeira, ano de conclusão e contexto do município (IDHM etc.) elevam o R² para 0,39 e reduzem a diferença de previsão de 113 para 97 pontos.
+- **O modelo aprende a desigualdade.** Entre alunos com nota real ≥ 700, a rede prevê **548** para quem tem renda de até 1 salário mínimo (SM) e **664** para quem tem mais de 7 SM. Usada para selecionar os 10% melhores, ela deixaria de fora ~95% dos talentos de baixa renda.
+- **Os dados de treino definem o viés.** Treinada só com alunos de alta renda, a rede superestima os de baixa renda em **+52 pontos**.
+- **Mais informação reduz o viés, mas não acaba com ele.** Escola, língua estrangeira, ano de conclusão e contexto do município (IDHM etc.) elevam o R² para 0,39 e reduzem a diferença de previsão de 116 para 100 pontos.
 - **Uso responsável:** o modelo deve **indicar onde investir ajuda** (áreas, escolas, municípios) e **medir valor agregado**, nunca selecionar pessoas.
 
 ---
@@ -78,7 +78,7 @@ As amostras já estão em `dados/`, então **o notebook roda direto**, sem baixa
 pip install -r requirements.txt
 ```
 
-Python 3.10+ com `pandas`, `numpy`, `matplotlib`, `scikit-learn`, `scipy`, `torch` e `jupyter`.
+Python 3.10+ com `pandas`, `numpy`, `matplotlib`, `scikit-learn` (≥ 1.6), `scipy`, `torch` e `jupyter`.
 
 ### 2. Rodar o notebook (caminho rápido)
 
@@ -86,7 +86,7 @@ Python 3.10+ com `pandas`, `numpy`, `matplotlib`, `scikit-learn`, `scipy`, `torc
 jupyter notebook 03_rede_neural_enem.ipynb
 ```
 
-Leva cerca de **5 minutos** em CPU.
+Leva cerca de **8 minutos** em CPU.
 
 ### 3. Regerar os dados do zero (opcional)
 
@@ -111,7 +111,7 @@ O questionário mudou entre os anos (perguntas removidas, ordem diferente, conta
 
 ### Modelos
 
-Divisão dos dados: **70% treino / 15% validação (early stopping) / 15% teste**.
+Divisão dos dados: **70% treino / 15% validação (early stopping) / 15% teste**. A rede e o gradient boosting usam **a mesma validação** para a parada antecipada (o boosting recebe `X_val`/`y_val` explicitamente, em vez de separar uma fatia do próprio treino), então os dois treinam com os mesmos dados e são comparados pela mesma régua.
 
 | Modelo | Tipo | Como trata as categorias |
 |---|---|---|
@@ -128,7 +128,9 @@ Arquitetura da rede:
                                        → Linear(128,1) → nota (padronizada)
 ```
 
-Perda **Huber**, otimizador **AdamW** (lr 1e-3), batch 1024, **early stopping** pelo MAE de validação.
+Perda **Huber com δ = 30 pontos do ENEM**, otimizador **AdamW** (lr 1e-3), batch 1024, **early stopping** pelo MAE de validação.
+
+Como a rede treina com a nota padronizada (desvio ≈ 90 pontos), o δ é convertido para essa escala (`delta = 30 / desvio`). Com δ = 1 na escala padronizada, o corte ficaria em ~90 pontos, acima da maioria dos erros, e a Huber funcionaria quase como um MSE. Na validação, δ de 15, 30, 45 pontos ou 1 desvio dão MAE praticamente igual (diferença de centésimos de ponto). A escolha de 30 pontos é conceitual: robustez a notas extremas e alinhamento com o MAE usado na parada antecipada.
 
 ### Experimentos
 
@@ -150,23 +152,23 @@ Perda **Huber**, otimizador **AdamW** (lr 1e-3), batch 1024, **early stopping** 
 |---|---|---|---|
 | Média global | 72,5 | 89,4 | 0,000 |
 | Regressão linear | 58,0 | 73,1 | 0,330 |
-| Gradient boosting | 57,10 | 72,0 | 0,351 |
-| **Rede neural (MLP)** | **57,06** | 72,1 | 0,349 |
+| Gradient boosting | 57,07 | 72,0 | 0,351 |
+| **Rede neural (MLP)** | 57,10 | 72,3 | 0,346 |
 
 A rede **empata com o boosting**, um resultado comum em dados tabulares. A relação entre perfil e nota é quase **aditiva**, o que deixa pouco espaço para modelos mais complexos.
 
 ### Experimento A: precisão média não é justiça
 
 - Na média de cada grupo, o erro fica perto de zero.
-- Para alunos com **nota real ≥ 700**, a rede prevê **548** (renda ≤ 1 SM) contra **661** (renda > 7 SM).
-- Se a rede escolhesse os **10% melhores**: quem tem renda acima de 4 SM é **19%** dos candidatos, **54%** do top 10% real e **82%** dos selecionados pela rede.
+- Para alunos com **nota real ≥ 700**, a rede prevê **548** (renda ≤ 1 SM) contra **664** (renda > 7 SM).
+- Se a rede escolhesse os **10% melhores**: quem tem renda acima de 4 SM é **19%** dos candidatos, **54%** do top 10% real e **81%** dos selecionados pela rede.
 
 ### Experimento B: os dados de treino definem o viés
 
 | Cenário | Efeito |
 |---|---|
-| B1 – treino só com renda > 4 SM | superestima em **+60 pontos** quem tem renda ≤ 1 SM; R² cai de 0,33 para 0,05 |
-| B2 – treino só com Sul/Sudeste | efeito pequeno (Nordeste −9 pontos): o viés vem mais de **quem** está no treino do que de **onde** essas pessoas moram |
+| B1 – treino só com renda > 4 SM | superestima em **+52 pontos** quem tem renda ≤ 1 SM; R² cai de 0,33 para 0,09 |
+| B2 – treino só com Sul/Sudeste | efeito pequeno (Nordeste −6 pontos): o viés vem mais de **quem** está no treino do que de **onde** essas pessoas moram |
 
 O **controle aleatório de mesmo tamanho** não apresenta esses erros: o problema é a **composição** dos dados, não o volume.
 
@@ -174,15 +176,15 @@ O **controle aleatório de mesmo tamanho** não apresenta esses erros: o problem
 
 | Cenário | R² | Previsão p/ nota ≥ 700 (≤ 1 SM × > 7 SM) | Talentos ≤ 2 SM selecionados |
 |---|---|---|---|
-| Só questionário | 0,349 | 548 × 661 (Δ 113) | 5% |
-| + escola, língua, ano de conclusão | 0,385 | 562 × 667 (Δ 105) | 7% |
-| + contexto municipal | 0,392 | 568 × 665 (Δ 97) | 9% |
+| Só questionário | 0,346 | 548 × 664 (Δ 116) | 5% |
+| + escola, língua, ano de conclusão | 0,383 | 561 × 670 (Δ 110) | 7% |
+| + contexto municipal | 0,390 | 569 × 668 (Δ 100) | 9% |
 
 **Falácia ecológica:** o IDHM do município tem correlação de **0,78** com a nota **média** do município, mas melhora quase nada a previsão para **pessoas** (+0,007 de R²).
 
 ### Validação em 2025
 
-A rede de 2023, aplicada aos questionários de 2025, ordena as UFs com correlação de **0,98** com a média real. As previsões ficam ~10 pontos abaixo, porque `PARTICIPANTES` inclui faltosos, e são **comprimidas** (desvio-padrão previsto de 52 contra 86 no real).
+A rede de 2023, aplicada aos questionários de 2025, ordena as UFs com correlação de **0,98** com a média real. As previsões ficam ~10 pontos abaixo, porque `PARTICIPANTES` inclui faltosos, e são **comprimidas** (desvio-padrão previsto de 54 contra 86 no real).
 
 ---
 
